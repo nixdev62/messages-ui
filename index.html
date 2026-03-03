@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Messages</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg: #202225;
+      --sidebar: #2f3136;
+      --chat-bg: #36393f;
+      --bubble-me: #5865f2;
+      --bubble-them: #4f545c;
+      --text: #ffffff;
+      --muted: #b9bbbe;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .app { display: flex; height: 100vh; }
+    .sidebar {
+      width: 320px;
+      background: var(--sidebar);
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #202225;
+    }
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #202225;
+    }
+    .sidebar-header h1 { font-size: 18px; margin: 0; }
+    .sidebar-header button {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: none; background: var(--bubble-me); color: white; cursor: pointer;
+    }
+    .conversation-list { flex: 1; overflow-y: auto; }
+    .conversation-item {
+      padding: 10px 16px;
+      border-bottom: 1px solid #202225;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .conversation-item.active { background: #3a3c43; }
+    .conversation-title { font-size: 15px; }
+    .conversation-delete {
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .sidebar-footer {
+      padding: 10px 16px;
+      border-top: 1px solid #202225;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+    }
+    .chat {
+      flex: 1;
+      background: var(--chat-bg);
+      display: flex;
+      flex-direction: column;
+    }
+    .chat-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #202225;
+      font-size: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chat-messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .message-row { display: flex; margin-bottom: 4px; }
+    .message-row.me { justify-content: flex-end; }
+    .message-row.them { justify-content: flex-start; }
+    .message-bubble {
+      max-width: 70%;
+      padding: 8px 12px;
+      border-radius: 18px;
+      font-size: 14px;
+      line-height: 1.3;
+      position: relative;
+      word-wrap: break-word;
+    }
+    .message-row.me .message-bubble {
+      background: var(--bubble-me);
+      border-bottom-right-radius: 4px;
+    }
+    .message-row.them .message-bubble {
+      background: var(--bubble-them);
+      border-bottom-left-radius: 4px;
+    }
+    .message-meta {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .chat-input {
+      padding: 10px 12px;
+      border-top: 1px solid #202225;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .chat-input input[type="text"] {
+      flex: 1;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: none;
+      outline: none;
+      background: #40444b;
+      color: white;
+    }
+    .chat-input input[type="file"] {
+      display: none;
+    }
+    .file-label {
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: #40444b;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .chat-input button {
+      padding: 0 16px;
+      border-radius: 999px;
+      border: none;
+      background: var(--bubble-me);
+      color: white;
+      cursor: pointer;
+    }
+    .auth-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    .auth-card {
+      background: var(--sidebar);
+      padding: 24px;
+      border-radius: 12px;
+      width: 320px;
+    }
+    .auth-card h2 { margin-top: 0; margin-bottom: 16px; }
+    .auth-card input {
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: #40444b;
+      color: white;
+    }
+    .auth-card button {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: var(--bubble-me);
+      color: white;
+      cursor: pointer;
+    }
+    .auth-toggle {
+      margin-top: 10px;
+      text-align: center;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    @media (max-width: 800px) { .sidebar { width: 260px; } }
+    @media (max-width: 600px) { .sidebar { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <h1>Messages</h1>
+        <button id="newConvBtn">+</button>
+      </header>
+      <div id="conversationList" class="conversation-list"></div>
+      <footer class="sidebar-footer">
+        <span id="currentUser"></span>
+        <button id="logoutBtn">Logout</button>
+      </footer>
+    </aside>
+
+    <main class="chat">
+      <header class="chat-header">
+        <div id="chatTitle">Select a conversation</div>
+      </header>
+      <section id="chatMessages" class="chat-messages"></section>
+      <footer class="chat-input">
+        <label class="file-label">
+          <span id="fileLabelText">File</span>
+          <input type="file" id="fileInput" />
+        </label>
+        <input id="messageInput" type="text" placeholder="iMessage" />
+        <button id="sendBtn">Send</button>
+      </footer>
+    </main>
+  </div>
+
+  <!-- Auth overlay -->
+  <div class="auth-overlay" id="authOverlay">
+    <div class="auth-card">
+      <h2 id="authTitle">Sign In</h2>
+      <input id="authUsername" placeholder="Username" />
+      <input id="authPassword" type="password" placeholder="Password" />
+      <button id="authBtn">Sign In</button>
+      <div id="authToggle" class="auth-toggle">Create account</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"
+          integrity="sha384-3t5pZl8uQv3x5q0uV7Yt7GvZt3p0u7V0u7V0u7V0u7V0u7V0u7V0u7V0u7V0u7"
+          crossorigin="anonymous"></script>
+  <script>
+    const API = "https://api.yourdomain.com"; // change to your tunnel URL
+
+    const socket = io(API, { transports: ["websocket"] });
+
+    const authOverlay = document.getElementById("authOverlay");
+    const authTitle = document.getElementById("authTitle");
+    const authBtn = document.getElementById("authBtn");
+    const authToggle = document.getElementById("authToggle");
+    const authUsername = document.getElementById("authUsername");
+    const authPassword = document.getElementById("authPassword");
+
+    const convList = document.getElementById("conversationList");
+    const chatTitle = document.getElementById("chatTitle");
+    const chatMessages = document.getElementById("chatMessages");
+    const messageInput = document.getElementById("messageInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const newConvBtn = document.getElementById("newConvBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const currentUserSpan = document.getElementById("currentUser");
+    const fileInput = document.getElementById("fileInput");
+    const fileLabelText = document.getElementById("fileLabelText");
+
+    let mode = "login";
+    let token = localStorage.getItem("token");
+    let username = localStorage.getItem("username");
+    let conversations = [];
+    let currentConversationId = null;
+    let pendingFile = null;
+
+    function showAuth() {
+      authOverlay.style.display = "flex";
+    }
+    function hideAuth() {
+      authOverlay.style.display = "none";
+    }
+
+    if (!token) {
+      showAuth();
+    } else {
+      currentUserSpan.textContent = username;
+      hideAuth();
+      fetchConversations();
+    }
+
+    authToggle.onclick = () => {
+      mode = mode === "login" ? "signup" : "login";
+      authTitle.textContent = mode === "login" ? "Sign In" : "Create Account";
+      authBtn.textContent = mode === "login" ? "Sign In" : "Sign Up";
+      authToggle.textContent =
+        mode === "login" ? "Create account" : "Already have an account?";
+    };
+
+    authBtn.onclick = async () => {
+      const u = authUsername.value.trim();
+      const p = authPassword.value.trim();
+      if (!u || !p) return alert("Enter details");
+
+      if (mode === "signup") {
+        const res = await fetch(API + "/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p }),
+        });
+        if (!res.ok) return alert("Signup failed");
+        alert("Account created. Sign in now.");
+        mode = "login";
+        authTitle.textContent = "Sign In";
+        authBtn.textContent = "Sign In";
+        authToggle.textContent = "Create account";
+      } else {
+        const res = await fetch(API + "/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: u, password: p }),
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || "Login failed");
+        token = data.token;
+        username = data.username;
+        localStorage.setItem("token", token);
+        localStorage.setItem("username", username);
+        currentUserSpan.textContent = username;
+        hideAuth();
+        fetchConversations();
+      }
+    };
+
+    logoutBtn.onclick = () => {
+      localStorage.clear();
+      token = null;
+      username = null;
+      showAuth();
+    };
+
+    async function fetchConversations() {
+      const res = await fetch(API + "/conversations", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      conversations = await res.json();
+      renderConversations();
+    }
+
+    function renderConversations() {
+      convList.innerHTML = "";
+      conversations.forEach((c) => {
+        const div = document.createElement("div");
+        div.className =
+          "conversation-item" +
+          (c.id === currentConversationId ? " active" : "");
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "conversation-title";
+        titleSpan.textContent = c.title;
+        const delSpan = document.createElement("span");
+        delSpan.className = "conversation-delete";
+        delSpan.textContent = "Delete";
+        delSpan.onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm("Delete this conversation?")) return;
+          await fetch(API + "/conversations/" + c.id, {
+            method: "DELETE",
+            headers: { Authorization: "Bearer " + token },
+          });
+          if (currentConversationId === c.id) {
+            socket.emit("leaveConversation", c.id);
+            currentConversationId = null;
+            chatTitle.textContent = "Select a conversation";
+            chatMessages.innerHTML = "";
+          }
+          conversations = conversations.filter((x) => x.id !== c.id);
+          renderConversations();
+        };
+        div.onclick = () => openConversation(c.id, c.title);
+        div.appendChild(titleSpan);
+        div.appendChild(delSpan);
+        convList.appendChild(div);
+      });
+    }
+
+    async function openConversation(id, title) {
+      if (currentConversationId) {
+        socket.emit("leaveConversation", currentConversationId);
+      }
+      currentConversationId = id;
+      chatTitle.textContent = title;
+      renderConversations();
+      socket.emit("joinConversation", id);
+
+      const res = await fetch(API + `/conversations/${id}/messages`, {
+        headers: { Authorization: "Bearer " + token },
+      });
+      const msgs = await res.json();
+      chatMessages.innerHTML = "";
+      msgs.forEach(addMessageToUI);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addMessageToUI(m) {
+      const row = document.createElement("div");
+      const isMe = m.username === username;
+      row.className = "message-row " + (isMe ? "me" : "them");
+      const bubble = document.createElement("div");
+      bubble.className = "message-bubble";
+
+      if (m.file_url) {
+        const link = document.createElement("a");
+        link.href = API + m.file_url;
+        link.target = "_blank";
+        link.style.color = "#fff";
+        link.textContent = m.content || "File";
+        bubble.appendChild(link);
+      } else {
+        bubble.textContent = m.content;
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "message-meta";
+      meta.textContent = m.username;
+      bubble.appendChild(document.createElement("br"));
+      bubble.appendChild(meta);
+
+      row.appendChild(bubble);
+      chatMessages.appendChild(row);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    sendBtn.onclick = async () => {
+      if (!currentConversationId) return;
+      const text = messageInput.value.trim();
+      let fileUrl = null;
+
+      if (pendingFile) {
+        const form = new FormData();
+        form.append("file", pendingFile);
+        const res = await fetch(API + "/upload", {
+          method: "POST",
+          headers: { Authorization: "Bearer " + token },
+          body: form,
+        });
+        const data = await res.json();
+        fileUrl = data.url;
+      }
+
+      if (!text && !fileUrl) return;
+
+      await fetch(API + `/conversations/${currentConversationId}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({ content: text || null, file_url: fileUrl }),
+      });
+
+      messageInput.value = "";
+      pendingFile = null;
+      fileInput.value = "";
+      fileLabelText.textContent = "File";
+    };
+
+    messageInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendBtn.click();
+    });
+
+    newConvBtn.onclick = async () => {
+      const title = prompt("Conversation title");
+      if (!title) return;
+      const res = await fetch(API + "/conversations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({ title }),
+      });
+      const conv = await res.json();
+      conversations.push(conv);
+      renderConversations();
+    };
+
+    fileInput.onchange = () => {
+      const file = fileInput.files[0];
+      if (file) {
+        pendingFile = file;
+        fileLabelText.textContent = file.name.slice(0, 12) + (file.name.length > 12 ? "…" : "");
+      } else {
+        pendingFile = null;
+        fileLabelText.textContent = "File";
+      }
+    };
+
+    socket.on("newMessage", (payload) => {
+      if (String(payload.conversationId) !== String(currentConversationId)) return;
+      addMessageToUI(payload.message);
+    });
+
+    socket.on("conversationDeleted", (payload) => {
+      if (String(payload.id) === String(currentConversationId)) {
+        currentConversationId = null;
+        chatTitle.textContent = "Select a conversation";
+        chatMessages.innerHTML = "";
+      }
+      conversations = conversations.filter((c) => c.id !== payload.id);
+      renderConversations();
+    });
+  </script>
+</body>
+</html>
