@@ -1,506 +1,888 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Messages</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
-    :root {
-      --bg: #202225;
-      --sidebar: #2f3136;
-      --chat-bg: #36393f;
-      --bubble-me: #5865f2;
-      --bubble-them: #4f545c;
-      --text: #ffffff;
-      --muted: #b9bbbe;
-    }
     * { box-sizing: border-box; }
-    body {
+    :root { color-scheme: dark; }
+
+    html, body {
+      height: 100%;
+      width: 100%;
       margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-        sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      padding: 0;
+      overscroll-behavior: none;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
     }
-    .app { display: flex; height: 100vh; }
-    .sidebar {
+
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* LOADING SCREEN */
+    #loadingScreen {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 0.6s ease;
+    }
+    #loadingText {
+      margin-top: 18px;
+      font-size: 15px;
+      color: #a1a1a6;
+      letter-spacing: 0.3px;
+    }
+    .spinner {
+      width: 38px;
+      height: 38px;
+      border: 3px solid rgba(10,132,255,0.25);
+      border-top-color: #0a84ff;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* APP WRAPPER */
+    #appWrapper {
+      width: 100%;
+      height: 100vh;
+      display: none;
+    }
+    #loginView, #chatView {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* LOGIN */
+    #loginView {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+    #loginCard {
+      background: #111;
+      padding: 28px 24px 24px;
+      border-radius: 26px;
       width: 320px;
-      background: var(--sidebar);
-      display: flex;
-      flex-direction: column;
-      border-right: 1px solid #202225;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.7);
+      border: 1px solid #2c2c2e;
+      animation: fadeIn 0.4s ease-out;
     }
-    .sidebar-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 16px;
-      border-bottom: 1px solid #202225;
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
     }
-    .sidebar-header h1 { font-size: 18px; margin: 0; }
-    .sidebar-header button {
-      width: 28px; height: 28px; border-radius: 50%;
-      border: none; background: var(--bubble-me); color: white; cursor: pointer;
+    #loginCard h1 {
+      margin: 0 0 4px;
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
     }
-    .conversation-list { flex: 1; overflow-y: auto; }
-    .conversation-item {
-      padding: 10px 16px;
-      border-bottom: 1px solid #202225;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    #loginCard p {
+      margin: 0 0 18px;
+      font-size: 13px;
+      color: #a1a1a6;
     }
-    .conversation-item.active { background: #3a3c43; }
-    .conversation-title { font-size: 15px; }
-    .conversation-delete {
+    .fieldLabel {
       font-size: 12px;
-      color: var(--muted);
-      cursor: pointer;
+      color: #a1a1a6;
+      margin-bottom: 4px;
     }
-    .sidebar-footer {
-      padding: 10px 16px;
-      border-top: 1px solid #202225;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+    .fieldInput {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 11px;
+      border: 1px solid #2c2c2e;
+      background: #1c1c1e;
+      color: #fff;
+      margin-bottom: 12px;
       font-size: 14px;
+      transition: border 0.15s ease;
     }
-    .chat {
+    .fieldInput:focus {
+      outline: none;
+      border-color: #0a84ff;
+      box-shadow: 0 0 0 1px #0a84ff55;
+    }
+    .btnRow {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .btn {
       flex: 1;
-      background: var(--chat-bg);
+      padding: 9px 0;
+      border-radius: 999px;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.12s ease;
+    }
+    .btnPrimary {
+      background: #0a84ff;
+      color: #fff;
+      box-shadow: 0 8px 18px rgba(10,132,255,0.45);
+    }
+    .btnPrimary:active {
+      transform: scale(0.97);
+      box-shadow: 0 4px 10px rgba(10,132,255,0.4);
+    }
+    .btnSecondary {
+      background: #2c2c2e;
+      color: #fff;
+    }
+    .btnSecondary:active { transform: scale(0.97); }
+    .errorText {
+      color: #ff453a;
+      font-size: 12px;
+      margin-top: 6px;
+      min-height: 14px;
+    }
+
+    /* CHAT LAYOUT */
+    #chatView { display: none; }
+    #chatShell {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      background: #000;
+    }
+
+    /* SIDEBAR */
+    #sidebar {
+      width: 280px;
+      background: #111;
+      border-right: 1px solid #2c2c2e;
+      display: flex;
+      flex-direction: column;
+      animation: slideIn 0.4s ease-out;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    #sidebarHeader {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid #2c2c2e;
+    }
+    #sidebarHeader h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    #sidebarHeader p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: #a1a1a6;
+    }
+    #newButtons {
+      display: flex;
+      gap: 6px;
+      padding: 10px 12px 10px;
+      border-bottom: 1px solid #2c2c2e;
+    }
+    .pillBtn {
+      flex: 1;
+      border-radius: 999px;
+      border: none;
+      padding: 6px 0;
+      font-size: 12px;
+      cursor: pointer;
+      background: #1c1c1e;
+      color: #fff;
+      transition: background 0.12s ease, transform 0.08s ease;
+    }
+    .pillBtnPrimary { background: #0a84ff; }
+    .pillBtn:active { transform: scale(0.97); }
+    #convoList {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .convoItem {
+      padding: 9px 11px;
+      border-radius: 16px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      transition: background 0.12s ease, transform 0.08s ease;
+    }
+    .convoItem:hover { background: #1c1c1e; }
+    .convoItem.active {
+      background: #0a84ff;
+      transform: translateY(-1px);
+    }
+    .convoText {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .convoTitle {
+      font-size: 14px;
+      font-weight: 500;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .convoMeta {
+      font-size: 11px;
+      color: #d1d1d6;
+    }
+    .unreadDot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #ff453a;
+      flex-shrink: 0;
+      display: none;
+    }
+    .convoItem.unread .unreadDot { display: inline-block; }
+
+    /* MAIN CHAT */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at top, #1c1c1e 0, #000 55%);
+    }
+    #chatHeader {
+      padding: 10px 14px;
+      border-bottom: 1px solid #2c2c2e;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(24px);
+      background: linear-gradient(135deg, #111111dd, #050505dd);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+      animation: fadeIn 0.4s ease-out;
+    }
+    #chatHeaderLeft {
       display: flex;
       flex-direction: column;
     }
-    .chat-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid #202225;
+    #chatTitle {
       font-size: 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      font-weight: 600;
     }
-    .chat-messages {
+    #chatSubtitle {
+      font-size: 12px;
+      color: #a1a1a6;
+    }
+    #chatHeaderRight {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #userBadge {
+      font-size: 12px;
+      color: #a1a1a6;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #1c1c1e;
+      border: 1px solid #2c2c2e;
+    }
+    #silentToggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: #a1a1a6;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #1c1c1e;
+      border: 1px solid #2c2c2e;
+      cursor: pointer;
+    }
+    #silentDot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: #0a84ff;
+    }
+    #silentToggle.silent #silentDot { background: #ff453a; }
+    #deleteBtn {
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      border: 1px solid #2c2c2e;
+      background: #1c1c1e;
+      color: #ff453a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    /* MESSAGES */
+    #messages {
       flex: 1;
-      padding: 16px;
+      padding: 16px 10px 8px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
+      scroll-behavior: smooth;
     }
-    .message-row { display: flex; margin-bottom: 4px; }
-    .message-row.me { justify-content: flex-end; }
-    .message-row.them { justify-content: flex-start; }
-    .message-bubble {
-      max-width: 70%;
+    .bubbleRow {
+      display: flex;
+      width: 100%;
+      animation: bubbleIn 0.18s cubic-bezier(.17,.67,.45,1.3);
+    }
+    @keyframes bubbleIn {
+      from { transform: translateY(6px) scale(0.96); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .bubble {
+      max-width: 75%;
       padding: 8px 12px;
       border-radius: 18px;
       font-size: 14px;
       line-height: 1.3;
-      position: relative;
       word-wrap: break-word;
+      white-space: pre-wrap;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
     }
-    .message-row.me .message-bubble {
-      background: var(--bubble-me);
+    .meRow { justify-content: flex-end; }
+    .meBubble {
+      background: #0a84ff;
+      color: #fff;
       border-bottom-right-radius: 4px;
     }
-    .message-row.them .message-bubble {
-      background: var(--bubble-them);
+    .themRow { justify-content: flex-start; }
+    .themBubble {
+      background: #3a3a3c;
+      color: #fff;
       border-bottom-left-radius: 4px;
     }
-    .message-meta {
-      font-size: 11px;
-      color: var(--muted);
+    .bubbleMeta {
+      font-size: 10px;
+      color: #a1a1a6;
       margin-top: 2px;
+      text-align: right;
     }
-    .chat-input {
-      padding: 10px 12px;
-      border-top: 1px solid #202225;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .chat-input input[type="text"] {
-      flex: 1;
-      padding: 10px 12px;
-      border-radius: 999px;
-      border: none;
-      outline: none;
-      background: #40444b;
-      color: white;
-    }
-    .chat-input input[type="file"] {
-      display: none;
-    }
-    .file-label {
-      padding: 8px 10px;
-      border-radius: 999px;
-      background: #40444b;
+    .fileLink {
+      color: #ffd60a;
+      text-decoration: underline;
       cursor: pointer;
       font-size: 13px;
-      color: var(--muted);
+      display: inline-block;
+      margin-top: 4px;
     }
-    .chat-input button {
-      padding: 0 16px;
+    .imagePreview {
+      max-width: 180px;
+      max-height: 180px;
+      border-radius: 12px;
+      margin-top: 4px;
+      display: block;
+    }
+
+    /* COMPOSER */
+    #composer {
+      padding: 8px 10px 12px;
+      border-top: 1px solid #2c2c2e;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: #111;
+    }
+    #composerTop {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #fileInput { display: none; }
+    #fileLabel {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      border: 1px solid #2c2c2e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #fff;
+      font-size: 18px;
+      background: #1c1c1e;
+      transition: background 0.12s ease, transform 0.08s ease;
+    }
+    #fileLabel:active { transform: scale(0.95); }
+    #fileNameDisplay {
+      font-size: 11px;
+      color: #a1a1a6;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #composerBottom {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #msgInput {
+      flex: 1;
       border-radius: 999px;
       border: none;
-      background: var(--bubble-me);
-      color: white;
-      cursor: pointer;
+      padding: 10px 14px;
+      font-size: 14px;
+      background: #1c1c1e;
+      color: #fff;
     }
-    .auth-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 10;
-    }
-    .auth-card {
-      background: var(--sidebar);
-      padding: 24px;
-      border-radius: 12px;
-      width: 320px;
-    }
-    .auth-card h2 { margin-top: 0; margin-bottom: 16px; }
-    .auth-card input {
-      width: 100%;
-      margin-bottom: 10px;
-      padding: 10px;
-      border-radius: 8px;
+    #msgInput:focus { outline: none; }
+    #sendBtn {
+      border-radius: 999px;
       border: none;
-      background: #40444b;
-      color: white;
-    }
-    .auth-card button {
-      width: 100%;
-      padding: 10px;
-      border-radius: 8px;
-      border: none;
-      background: var(--bubble-me);
-      color: white;
+      padding: 8px 16px;
+      font-size: 14px;
+      background: #0a84ff;
+      color: #fff;
       cursor: pointer;
+      font-weight: 500;
+      box-shadow: 0 8px 18px rgba(10,132,255,0.45);
+      transition: transform 0.08s ease, box-shadow 0.08s ease;
     }
-    .auth-toggle {
-      margin-top: 10px;
-      text-align: center;
-      color: var(--muted);
-      cursor: pointer;
+    #sendBtn:active {
+      transform: scale(0.97);
+      box-shadow: 0 4px 10px rgba(10,132,255,0.4);
     }
-    @media (max-width: 800px) { .sidebar { width: 260px; } }
-    @media (max-width: 600px) { .sidebar { display: none; } }
+    #sendBtn:disabled {
+      opacity: 0.5;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    @media (max-width: 800px) {
+      #sidebar { display: none; }
+    }
   </style>
 </head>
 <body>
-  <div class="app">
-    <aside class="sidebar">
-      <header class="sidebar-header">
-        <h1>Messages</h1>
-        <button id="newConvBtn">+</button>
-      </header>
-      <div id="conversationList" class="conversation-list"></div>
-      <footer class="sidebar-footer">
-        <span id="currentUser"></span>
-        <button id="logoutBtn">Logout</button>
-      </footer>
-    </aside>
+<div id="loadingScreen">
+  <div class="spinner"></div>
+  <div id="loadingText">Waking backend…</div>
+</div>
 
-    <main class="chat">
-      <header class="chat-header">
-        <div id="chatTitle">Select a conversation</div>
-      </header>
-      <section id="chatMessages" class="chat-messages"></section>
-      <footer class="chat-input">
-        <label class="file-label">
-          <span id="fileLabelText">File</span>
-          <input type="file" id="fileInput" />
-        </label>
-        <input id="messageInput" type="text" placeholder="iMessage" />
-        <button id="sendBtn">Send</button>
-      </footer>
-    </main>
-  </div>
-
-  <!-- Auth overlay -->
-  <div class="auth-overlay" id="authOverlay">
-    <div class="auth-card">
-      <h2 id="authTitle">Sign In</h2>
-      <input id="authUsername" placeholder="Username" />
-      <input id="authPassword" type="password" placeholder="Password" />
-      <button id="authBtn">Sign In</button>
-      <div id="authToggle" class="auth-toggle">Create account</div>
+<div id="appWrapper">
+  <div id="loginView">
+    <div id="loginCard">
+      <h1>Messages</h1>
+      <p>Sign up or log in to start texting.</p>
+      <div class="fieldLabel">Username</div>
+      <input id="username" class="fieldInput" placeholder="e.g. nix">
+      <div class="fieldLabel">Password</div>
+      <input id="password" class="fieldInput" type="password" placeholder="••••••••">
+      <div class="btnRow">
+        <button class="btn btnSecondary" onclick="signup()">Sign Up</button>
+        <button class="btn btnPrimary" onclick="login()">Log In</button>
+      </div>
+      <div id="loginError" class="errorText"></div>
     </div>
   </div>
 
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"
-          integrity="sha384-3t5pZl8uQv3x5q0uV7Yt7GvZt3p0u7V0u7V0u7V0u7V0u7V0u7V0u7V0u7V0u7"
-          crossorigin="anonymous"></script>
-  <script>
-    const API = "https://api.yourdomain.com"; // change to your tunnel URL
+  <div id="chatView">
+    <div id="chatShell">
+      <div id="sidebar">
+        <div id="sidebarHeader">
+          <h2>Chats</h2>
+          <p>DMs & groups</p>
+        </div>
+        <div id="newButtons">
+          <button class="pillBtn pillBtnPrimary" onclick="promptDM()">New DM</button>
+          <button class="pillBtn" onclick="promptGroup()">New Group</button>
+        </div>
+        <div id="convoList"></div>
+      </div>
 
-    const socket = io(API, { transports: ["websocket"] });
+      <div id="main">
+        <div id="chatHeader">
+          <div id="chatHeaderLeft">
+            <div id="chatTitle">No conversation</div>
+            <div id="chatSubtitle">Select or create a chat</div>
+          </div>
+          <div id="chatHeaderRight">
+            <div id="silentToggle" onclick="toggleSilent()">
+              <div id="silentDot"></div>
+              <span id="silentLabel">Sound On</span>
+            </div>
+            <div id="userBadge"></div>
+            <button id="deleteBtn" onclick="deleteConversation()" title="Delete conversation">🗑</button>
+          </div>
+        </div>
 
-    const authOverlay = document.getElementById("authOverlay");
-    const authTitle = document.getElementById("authTitle");
-    const authBtn = document.getElementById("authBtn");
-    const authToggle = document.getElementById("authToggle");
-    const authUsername = document.getElementById("authUsername");
-    const authPassword = document.getElementById("authPassword");
+        <div id="messages"></div>
 
-    const convList = document.getElementById("conversationList");
-    const chatTitle = document.getElementById("chatTitle");
-    const chatMessages = document.getElementById("chatMessages");
-    const messageInput = document.getElementById("messageInput");
-    const sendBtn = document.getElementById("sendBtn");
-    const newConvBtn = document.getElementById("newConvBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
-    const currentUserSpan = document.getElementById("currentUser");
-    const fileInput = document.getElementById("fileInput");
-    const fileLabelText = document.getElementById("fileLabelText");
+        <div id="composer">
+          <div id="composerTop">
+            <label id="fileLabel" for="fileInput">+</label>
+            <input id="fileInput" type="file" onchange="onFileChange(event)">
+            <div id="fileNameDisplay">No file selected</div>
+          </div>
+          <div id="composerBottom">
+            <input id="msgInput" placeholder="iMessage" onkeydown="if(event.key==='Enter'){event.preventDefault();sendMessage();}">
+            <button id="sendBtn" onclick="sendMessage()">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-    let mode = "login";
-    let token = localStorage.getItem("token");
-    let username = localStorage.getItem("username");
-    let conversations = [];
-    let currentConversationId = null;
-    let pendingFile = null;
+<audio id="pingSound">
+  <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAAA" type="audio/wav">
+</audio>
 
-    function showAuth() {
-      authOverlay.style.display = "flex";
-    }
-    function hideAuth() {
-      authOverlay.style.display = "none";
-    }
+<script>
+  const backend = "https://messages-use.onrender.com";
+  let socket = null;
+  let userId = null;
+  let username = null;
+  let currentConvo = null;
+  let selectedFile = null;
+  let silentMode = false;
+  const unreadMap = {};
+  const pingSound = document.getElementById("pingSound");
 
-    if (!token) {
-      showAuth();
+  function playPing() {
+    if (silentMode) return;
+    try { pingSound.currentTime = 0; pingSound.play(); } catch {}
+  }
+
+  function toggleSilent() {
+    silentMode = !silentMode;
+    const toggle = document.getElementById("silentToggle");
+    const label = document.getElementById("silentLabel");
+    if (silentMode) {
+      toggle.classList.add("silent");
+      label.textContent = "Silent";
     } else {
-      currentUserSpan.textContent = username;
-      hideAuth();
-      fetchConversations();
+      toggle.classList.remove("silent");
+      label.textContent = "Sound On";
     }
+  }
 
-    authToggle.onclick = () => {
-      mode = mode === "login" ? "signup" : "login";
-      authTitle.textContent = mode === "login" ? "Sign In" : "Create Account";
-      authBtn.textContent = mode === "login" ? "Sign In" : "Sign Up";
-      authToggle.textContent =
-        mode === "login" ? "Create account" : "Already have an account?";
-    };
+  function setError(msg) {
+    document.getElementById("loginError").textContent = msg || "";
+  }
 
-    authBtn.onclick = async () => {
-      const u = authUsername.value.trim();
-      const p = authPassword.value.trim();
-      if (!u || !p) return alert("Enter details");
-
-      if (mode === "signup") {
-        const res = await fetch(API + "/auth/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: u, password: p }),
-        });
-        if (!res.ok) return alert("Signup failed");
-        alert("Account created. Sign in now.");
-        mode = "login";
-        authTitle.textContent = "Sign In";
-        authBtn.textContent = "Sign In";
-        authToggle.textContent = "Create account";
-      } else {
-        const res = await fetch(API + "/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: u, password: p }),
-        });
-        const data = await res.json();
-        if (!res.ok) return alert(data.error || "Login failed");
-        token = data.token;
-        username = data.username;
-        localStorage.setItem("token", token);
-        localStorage.setItem("username", username);
-        currentUserSpan.textContent = username;
-        hideAuth();
-        fetchConversations();
-      }
-    };
-
-    logoutBtn.onclick = () => {
-      localStorage.clear();
-      token = null;
-      username = null;
-      showAuth();
-    };
-
-    async function fetchConversations() {
-      const res = await fetch(API + "/conversations", {
-        headers: { Authorization: "Bearer " + token },
+  async function signup() {
+    setError("");
+    const u = document.getElementById("username").value.trim();
+    const p = document.getElementById("password").value.trim();
+    if (!u || !p) return setError("Enter username and password.");
+    try {
+      const res = await fetch(backend + "/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: u, password: p })
       });
-      conversations = await res.json();
-      renderConversations();
+      const data = await res.json();
+      if (data.error) return setError(data.error);
+      setError("Account created. Now log in.");
+    } catch {
+      setError("Signup failed.");
     }
+  }
 
-    function renderConversations() {
-      convList.innerHTML = "";
-      conversations.forEach((c) => {
+  async function login() {
+    setError("");
+    const u = document.getElementById("username").value.trim();
+    const p = document.getElementById("password").value.trim();
+    if (!u || !p) return setError("Enter username and password.");
+    try {
+      const res = await fetch(backend + "/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: u, password: p })
+      });
+      const data = await res.json();
+      if (data.error) return setError(data.error);
+      userId = data.userId;
+      username = u;
+      document.getElementById("userBadge").textContent = username;
+      document.getElementById("loginView").style.display = "none";
+      document.getElementById("chatView").style.display = "block";
+      initSocket();
+      loadConversations();
+    } catch {
+      setError("Login failed.");
+    }
+  }
+
+  function initSocket() {
+    socket = io(backend);
+    socket.on("message", msg => handleIncoming(msg));
+    socket.on("file", msg => handleIncoming(msg));
+  }
+
+  function handleIncoming(msg) {
+    const isCurrent = msg.conversationId === currentConvo;
+    const isMe = msg.senderId === userId;
+    if (isCurrent) {
+      addMessage(msg, true);
+    } else if (!isMe) {
+      unreadMap[msg.conversationId] = true;
+      loadConversations();
+      playPing();
+    }
+  }
+
+  async function loadConversations() {
+    if (!userId) return;
+    try {
+      const res = await fetch(backend + "/conversations?userId=" + encodeURIComponent(userId));
+      const convos = await res.json();
+      const list = document.getElementById("convoList");
+      list.innerHTML = "";
+      convos.forEach(c => {
         const div = document.createElement("div");
-        div.className =
-          "conversation-item" +
-          (c.id === currentConversationId ? " active" : "");
-        const titleSpan = document.createElement("span");
-        titleSpan.className = "conversation-title";
-        titleSpan.textContent = c.title;
-        const delSpan = document.createElement("span");
-        delSpan.className = "conversation-delete";
-        delSpan.textContent = "Delete";
-        delSpan.onclick = async (e) => {
-          e.stopPropagation();
-          if (!confirm("Delete this conversation?")) return;
-          await fetch(API + "/conversations/" + c.id, {
-            method: "DELETE",
-            headers: { Authorization: "Bearer " + token },
-          });
-          if (currentConversationId === c.id) {
-            socket.emit("leaveConversation", c.id);
-            currentConversationId = null;
-            chatTitle.textContent = "Select a conversation";
-            chatMessages.innerHTML = "";
-          }
-          conversations = conversations.filter((x) => x.id !== c.id);
-          renderConversations();
-        };
-        div.onclick = () => openConversation(c.id, c.title);
-        div.appendChild(titleSpan);
-        div.appendChild(delSpan);
-        convList.appendChild(div);
+        div.className = "convoItem" + (c.id === currentConvo ? " active" : "");
+        if (unreadMap[c.id]) div.classList.add("unread");
+
+        const textWrap = document.createElement("div");
+        textWrap.className = "convoText";
+
+        const title = document.createElement("div");
+        title.className = "convoTitle";
+        title.textContent = c.type === "dm" ? (c.otherName || "DM") : (c.name || "Group");
+
+        const meta = document.createElement("div");
+        meta.className = "convoMeta";
+        meta.textContent = c.type === "dm" ? "Direct message" : "Group chat";
+
+        textWrap.appendChild(title);
+        textWrap.appendChild(meta);
+
+        const dot = document.createElement("div");
+        dot.className = "unreadDot";
+
+        div.appendChild(textWrap);
+        div.appendChild(dot);
+
+        div.onclick = () => openConversation(c.id, title.textContent, meta.textContent);
+        list.appendChild(div);
       });
+    } catch (e) {
+      console.error(e);
     }
+  }
 
-    async function openConversation(id, title) {
-      if (currentConversationId) {
-        socket.emit("leaveConversation", currentConversationId);
-      }
-      currentConversationId = id;
-      chatTitle.textContent = title;
-      renderConversations();
-      socket.emit("joinConversation", id);
+  async function openConversation(id, title, subtitle) {
+    currentConvo = id;
+    unreadMap[id] = false;
 
-      const res = await fetch(API + `/conversations/${id}/messages`, {
-        headers: { Authorization: "Bearer " + token },
-      });
+    const list = document.getElementById("convoList").children;
+    Array.from(list).forEach(el => {
+      el.classList.remove("active");
+      el.classList.remove("unread");
+      const t = el.querySelector(".convoTitle")?.textContent;
+      const m = el.querySelector(".convoMeta")?.textContent;
+      if (t === title && m === subtitle) el.classList.add("active");
+    });
+
+    document.getElementById("chatTitle").textContent = title;
+    document.getElementById("chatSubtitle").textContent = subtitle;
+    socket.emit("join", id);
+
+    try {
+      const res = await fetch(backend + "/messages?conversationId=" + encodeURIComponent(id));
       const msgs = await res.json();
-      chatMessages.innerHTML = "";
-      msgs.forEach(addMessageToUI);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+      const box = document.getElementById("messages");
+      box.innerHTML = "";
+      msgs.forEach(m => addMessage(m, false));
+      box.scrollTop = box.scrollHeight;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function addMessage(msg, fromSocket) {
+    const row = document.createElement("div");
+    const isMe = msg.senderId === userId;
+    row.className = "bubbleRow " + (isMe ? "meRow" : "themRow");
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble " + (isMe ? "meBubble" : "themBubble");
+
+    if (msg.content) {
+      const text = document.createElement("div");
+      text.textContent = msg.content;
+      bubble.appendChild(text);
     }
 
-    function addMessageToUI(m) {
-      const row = document.createElement("div");
-      const isMe = m.username === username;
-      row.className = "message-row " + (isMe ? "me" : "them");
-      const bubble = document.createElement("div");
-      bubble.className = "message-bubble";
+    if (msg.fileUrl) {
+      const link = document.createElement("a");
+      link.href = msg.fileUrl;
+      link.target = "_blank";
+      link.className = "fileLink";
+      link.textContent = msg.fileName || "File";
+      bubble.appendChild(link);
 
-      if (m.file_url) {
-        const link = document.createElement("a");
-        link.href = API + m.file_url;
-        link.target = "_blank";
-        link.style.color = "#fff";
-        link.textContent = m.content || "File";
-        bubble.appendChild(link);
-      } else {
-        bubble.textContent = m.content;
+      if (/\.(png|jpg|jpeg|gif|webp)$/i.test(msg.fileName || "")) {
+        const img = document.createElement("img");
+        img.src = msg.fileUrl;
+        img.className = "imagePreview";
+        bubble.appendChild(img);
       }
-
-      const meta = document.createElement("div");
-      meta.className = "message-meta";
-      meta.textContent = m.username;
-      bubble.appendChild(document.createElement("br"));
-      bubble.appendChild(meta);
-
-      row.appendChild(bubble);
-      chatMessages.appendChild(row);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    sendBtn.onclick = async () => {
-      if (!currentConversationId) return;
-      const text = messageInput.value.trim();
-      let fileUrl = null;
+    const meta = document.createElement("div");
+    meta.className = "bubbleMeta";
+    meta.textContent = isMe ? "You" : (msg.senderName || "Them");
+    bubble.appendChild(meta);
 
-      if (pendingFile) {
+    row.appendChild(bubble);
+    const box = document.getElementById("messages");
+    box.appendChild(row);
+    box.scrollTop = box.scrollHeight;
+
+    if (fromSocket && !isMe) playPing();
+  }
+
+  function onFileChange(e) {
+    const file = e.target.files[0];
+    selectedFile = file || null;
+    document.getElementById("fileNameDisplay").textContent =
+      file ? ("Selected: " + file.name) : "No file selected";
+  }
+
+  async function sendMessage() {
+    if (!currentConvo) return;
+    const text = document.getElementById("msgInput").value.trim();
+    const hasFile = !!selectedFile;
+    if (!text && !hasFile) return;
+
+    document.getElementById("sendBtn").disabled = true;
+
+    try {
+      if (hasFile) {
         const form = new FormData();
-        form.append("file", pendingFile);
-        const res = await fetch(API + "/upload", {
+        form.append("file", selectedFile);
+        form.append("conversationId", currentConvo);
+        form.append("senderId", userId);
+        form.append("senderName", username);
+        form.append("content", text);
+
+        await fetch(backend + "/upload", {
           method: "POST",
-          headers: { Authorization: "Bearer " + token },
-          body: form,
+          body: form
         });
-        const data = await res.json();
-        fileUrl = data.url;
-      }
-
-      if (!text && !fileUrl) return;
-
-      await fetch(API + `/conversations/${currentConversationId}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
-        body: JSON.stringify({ content: text || null, file_url: fileUrl }),
-      });
-
-      messageInput.value = "";
-      pendingFile = null;
-      fileInput.value = "";
-      fileLabelText.textContent = "File";
-    };
-
-    messageInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") sendBtn.click();
-    });
-
-    newConvBtn.onclick = async () => {
-      const title = prompt("Conversation title");
-      if (!title) return;
-      const res = await fetch(API + "/conversations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
-        body: JSON.stringify({ title }),
-      });
-      const conv = await res.json();
-      conversations.push(conv);
-      renderConversations();
-    };
-
-    fileInput.onchange = () => {
-      const file = fileInput.files[0];
-      if (file) {
-        pendingFile = file;
-        fileLabelText.textContent = file.name.slice(0, 12) + (file.name.length > 12 ? "…" : "");
+        selectedFile = null;
+        document.getElementById("fileInput").value = "";
+        document.getElementById("fileNameDisplay").textContent = "No file selected";
+        document.getElementById("msgInput").value = "";
       } else {
-        pendingFile = null;
-        fileLabelText.textContent = "File";
+        const msg = {
+          id: Date.now(),
+          conversationId: currentConvo,
+          senderId: userId,
+          senderName: username,
+          content: text
+        };
+        socket.emit("message", msg);
+        addMessage(msg, false);
+        document.getElementById("msgInput").value = "";
       }
-    };
+    } catch (e) {
+      console.error(e);
+    } finally {
+      document.getElementById("sendBtn").disabled = false;
+    }
+  }
 
-    socket.on("newMessage", (payload) => {
-      if (String(payload.conversationId) !== String(currentConversationId)) return;
-      addMessageToUI(payload.message);
-    });
+  async function promptDM() {
+    const other = prompt("Enter username to DM:");
+    if (!other) return;
+    try {
+      const res = await fetch(backend + "/dm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user1: userId, otherUsername: other })
+      });
+      const data = await res.json();
+      if (data.error) return alert(data.error);
+      await loadConversations();
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
-    socket.on("conversationDeleted", (payload) => {
-      if (String(payload.id) === String(currentConversationId)) {
-        currentConversationId = null;
-        chatTitle.textContent = "Select a conversation";
-        chatMessages.innerHTML = "";
-      }
-      conversations = conversations.filter((c) => c.id !== payload.id);
-      renderConversations();
-    });
-  </script>
+  async function promptGroup() {
+    const name = prompt("Group name:");
+    if (!name) return;
+    const membersStr = prompt("Usernames to add (comma separated):");
+    if (!membersStr) return;
+    const members = membersStr.split(",").map(s => s.trim()).filter(Boolean);
+    try {
+      const res = await fetch(backend + "/group", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, ownerId: userId, memberUsernames: members })
+      });
+      const data = await res.json();
+      if (data.error) return alert(data.error);
+      await loadConversations();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function deleteConversation() {
+    if (!currentConvo) return;
+    const ok = confirm("Delete this conversation and all its messages?");
+    if (!ok) return;
+    try {
+      await fetch(backend + "/conversation/" + encodeURIComponent(currentConvo), {
+        method: "DELETE"
+      });
+      currentConvo = null;
+      document.getElementById("chatTitle").textContent = "No conversation";
+      document.getElementById("chatSubtitle").textContent = "Select or create a chat";
+      document.getElementById("messages").innerHTML = "";
+      await loadConversations();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function wakeBackend() {
+    const loadingText = document.getElementById("loadingText");
+    try {
+      loadingText.textContent = "Waking backend…";
+      await fetch(backend + "/ping", { cache: "no-store" });
+      loadingText.textContent = "Backend ready";
+      setTimeout(() => {
+        document.getElementById("loadingScreen").style.opacity = "0";
+        setTimeout(() => {
+          document.getElementById("loadingScreen").style.display = "none";
+          document.getElementById("appWrapper").style.display = "block";
+        }, 600);
+      }, 300);
+    } catch (e) {
+      loadingText.textContent = "Retrying backend…";
+      setTimeout(wakeBackend, 1500);
+    }
+  }
+
+  wakeBackend();
+</script>
 </body>
 </html>
