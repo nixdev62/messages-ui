@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Messages (Discord‑style)</title>
+  <title>messages</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
@@ -25,48 +25,18 @@
       padding-bottom: env(safe-area-inset-bottom);
     }
 
-    /* LOADING SCREEN */
-    #loadingScreen {
-      position: fixed;
-      inset: 0;
-      background: #05060a;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      opacity: 1;
-      transition: opacity 0.6s ease;
-    }
-    .spinner {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      border: 3px solid rgba(88,101,242,0.25);
-      border-top-color: #5865f2;
-      animation: spin 0.9s linear infinite;
-    }
-    #loadingText {
-      margin-top: 14px;
-      font-size: 14px;
-      color: #b9bbbe;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* APP WRAPPER */
     #appWrapper {
-      display: none;
       height: 100vh;
       width: 100%;
       background: #0b0c10;
     }
 
-    /* LOGIN VIEW */
     #loginView, #chatView {
       height: 100%;
       width: 100%;
     }
 
+    /* LOGIN VIEW */
     #loginView {
       display: flex;
       align-items: center;
@@ -162,7 +132,7 @@
       min-height: 14px;
     }
 
-    /* CHAT LAYOUT (DISCORD STYLE) */
+    /* CHAT LAYOUT */
     #chatView {
       display: none;
     }
@@ -174,7 +144,7 @@
       background: #0b0c10;
     }
 
-    /* LEFT: CONVERSATION BAR (SERVER BAR STYLE) */
+    /* LEFT: CONVERSATION BAR */
     #convoBar {
       width: 72px;
       background: #1e1f22;
@@ -565,11 +535,6 @@
 </head>
 <body>
 
-<div id="loadingScreen">
-  <div class="spinner"></div>
-  <div id="loadingText">Waking backend… this can take up to a minute</div>
-</div>
-
 <div id="appWrapper">
   <!-- LOGIN -->
   <div id="loginView">
@@ -659,7 +624,7 @@
 </audio>
 
 <script>
-  const backend = "https://messages-use.onrender.com"; // change to Railway later if needed
+  const backend = "https://messages-use.onrender.com";
 
   let socket = null;
   let userId = null;
@@ -745,12 +710,13 @@
   function handleIncoming(msg) {
     const isCurrent = msg.conversationId === currentConvo;
     const isMe = msg.senderId === userId;
+    if (!isMe) playPing();
+
     if (isCurrent) {
       addMessage(msg);
     } else if (!isMe) {
       unreadMap[msg.conversationId] = true;
       renderConvoIcons();
-      playPing();
     }
   }
 
@@ -924,8 +890,6 @@
     row.appendChild(body);
     box.appendChild(row);
     box.scrollTop = box.scrollHeight;
-
-    if (msg.senderId !== userId) playPing();
   }
 
   function onFileChange(e) {
@@ -968,7 +932,6 @@
           senderName: username,
           content: text
         };
-        // IMPORTANT: do NOT addMessage here; wait for backend echo
         socket.emit("message", msg);
         document.getElementById("msgInput").value = "";
       }
@@ -1041,29 +1004,6 @@
       console.error(e);
     }
   }
-
-  async function wakeBackend() {
-    const loadingText = document.getElementById("loadingText");
-    while (true) {
-      try {
-        loadingText.textContent = "Waking backend… this can take up to a minute";
-        await fetch(backend + "/ping", { cache: "no-store" });
-        loadingText.textContent = "Backend ready";
-        await new Promise(r => setTimeout(r, 500));
-        document.getElementById("loadingScreen").style.opacity = "0";
-        setTimeout(() => {
-          document.getElementById("loadingScreen").style.display = "none";
-          document.getElementById("appWrapper").style.display = "block";
-        }, 600);
-        break;
-      } catch (e) {
-        loadingText.textContent = "Still waking backend… retrying in 3 seconds";
-        await new Promise(r => setTimeout(r, 3000));
-      }
-    }
-  }
-
-  wakeBackend();
 </script>
 </body>
 </html>
