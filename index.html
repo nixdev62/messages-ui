@@ -712,9 +712,15 @@ function playPing() {
 
   function initSocket() {
     socket = io(backend);
-    socket.on("message", msg => handleIncoming(msg));
-    socket.on("file", msg => handleIncoming(msg));
-  }
+    socket.on("message", msg => {
+  playPing();
+  handleIncoming(msg);
+});
+
+socket.on("file", msg => {
+  playPing();
+  handleIncoming(msg);
+});
 
   function handleIncoming(msg) {
     const isCurrent = msg.conversationId === currentConvo;
