@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Discord‑Style Messages</title>
+  <title>Messages (Discord‑style)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
@@ -249,6 +249,13 @@
     #addConvoBtn:hover {
       background: #23a559;
       color: #fff;
+    }
+
+    #convoIcons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
     }
 
     /* MIDDLE: INFO PANEL */
@@ -846,9 +853,10 @@
           const li = document.createElement("li");
           const a = document.createElement("a");
           a.href = f.url;
-          a.target = "_blank";
           a.textContent = f.name;
           a.style.color = "#00aff4";
+          a.className = "fileLink";
+          a.download = f.name || "file";
           li.appendChild(a);
           filesUl.appendChild(li);
         });
@@ -899,9 +907,9 @@
     if (msg.fileUrl) {
       const link = document.createElement("a");
       link.href = msg.fileUrl;
-      link.target = "_blank";
       link.className = "fileLink";
       link.textContent = msg.fileName || "File";
+      link.download = msg.fileName || "file";
       body.appendChild(link);
 
       if (/\.(png|jpg|jpeg|gif|webp)$/i.test(msg.fileName || "")) {
@@ -1059,3 +1067,4 @@
 </script>
 </body>
 </html>
+
