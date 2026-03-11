@@ -636,6 +636,14 @@
   const unreadMap = {};
   const pingSound = document.getElementById("pingSound");
 
+function playPing() {
+  try {
+    pingSound.currentTime = 0;
+    pingSound.play();
+  } catch (e) {}
+}
+
+
   function playPing() {
     if (silentMode) return;
     try { pingSound.currentTime = 0; pingSound.play(); } catch {}
